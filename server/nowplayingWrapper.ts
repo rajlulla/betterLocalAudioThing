@@ -361,19 +361,38 @@ if (!nativeBinding || process.env.NAPI_RS_FORCE_WASI) {
   }
 }
 
+let NowPlayingImpl: any;
+
 if (!nativeBinding) {
-  if (loadErrors.length > 0) {
-    // TODO Link to documentation with potential fixes
-    //  - The package owner could build/publish bindings for this arch
-    //  - The user may need to bundle the correct files
-    //  - The user may need to re-install node_modules to get new packages
-    console.log(loadErrors.toString())
-    throw new Error('Failed to load native binding', { cause: loadErrors })
+  // On macOS, try AppleScript fallback if native module fails
+  if (process.platform === 'darwin') {
+    console.log('[nowplaying] Native module failed on macOS, using AppleScript fallback');
+    try {
+      const fallback = dkRequire('./applemusic-fallback.cjs');
+      NowPlayingImpl = fallback.NowPlaying;
+    } catch (fallbackError) {
+      console.error('[nowplaying] AppleScript fallback also failed:', fallbackError);
+      if (loadErrors.length > 0) {
+        console.log('[nowplaying] Native module errors:', loadErrors.toString());
+        throw new Error('Failed to load native binding and AppleScript fallback', { cause: loadErrors });
+      }
+      throw new Error('Failed to load native binding and AppleScript fallback');
+    }
+  } else {
+    if (loadErrors.length > 0) {
+      // TODO Link to documentation with potential fixes
+      //  - The package owner could build/publish bindings for this arch
+      //  - The user may need to bundle the correct files
+      //  - The user may need to re-install node_modules to get new packages
+      console.log(loadErrors.toString())
+      throw new Error('Failed to load native binding', { cause: loadErrors })
+    }
+    throw new Error(`Failed to load native binding`)
   }
-  throw new Error(`Failed to load native binding`)
+} else {
+  NowPlayingImpl = nativeBinding.NowPlaying;
 }
 
-const { NowPlaying: NowPlayingImpl } = nativeBinding as { NowPlaying: any }
 // Assert that NowPlayingImpl is a constructable class
 export const NowPlaying = NowPlayingImpl as new (
   callback: (event: any) => void, 
